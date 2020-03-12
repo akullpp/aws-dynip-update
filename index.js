@@ -139,7 +139,7 @@ const addNewIp = async (ip_new, secgroup, ec2) => {
 const saveConfig = async config =>
   fs.writeFile(CONFIG_PATH, yaml.safeDump(config))
 
-exports.awsDynipUpdate = async function() {
+;(async () => {
   // Configure axios to unpack responses.
   axios.interceptors.response.use(response => response.data)
 
@@ -159,4 +159,4 @@ exports.awsDynipUpdate = async function() {
   }
   await addNewIp(newIp, config.secgroup, ec2)
   await saveConfig({ ...config, ip: newIp })
-}
+})()
