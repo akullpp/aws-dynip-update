@@ -15,7 +15,6 @@
     "aws",
     "ec2"
   ],
-  "main": "index.js",
   "dependencies": {
     "aws-sdk": "^2.637.0",
     "axios": "^0.19.2",
