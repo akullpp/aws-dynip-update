@@ -1,0 +1,50 @@
+{
+  "name": "aws-dynip-update",
+  "version": "0.1.0",
+  "description": "Updates the IP rule",
+  "author": "Andreas Kull <akullpp@gmail.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/akullpp/aws-dynip-update"
+  },
+  "bugs": {
+    "url": "https://github.com/akullpp/aws-dynip-update/issues"
+  },
+  "keywords": [
+    "aws",
+    "ec2"
+  ],
+  "dependencies": {
+    "aws-sdk": "^2.637.0",
+    "axios": "^0.19.2",
+    "commander": "^4.1.1",
+    "inquirer": "^7.1.0",
+    "js-yaml": "^3.13.1"
+  },
+  "devDependencies": {
+    "eslint": "^6.8.0",
+    "eslint-plugin-prettier": "^3.1.2",
+    "prettier": "^1.19.1"
+  },
+  "prettier": {
+    "semi": false,
+    "singleQuote": true,
+    "trailingComma": "all"
+  },
+  "eslintConfig": {
+    "env": {
+      "es6": true
+    },
+    "parserOptions": {
+      "ecmaVersion": 2020,
+      "sourceType": "module"
+    },
+    "extends": [
+      "prettier"
+    ],
+    "plugins": [
+      "prettier"
+    ]
+  }
+}
