@@ -1,30 +1,26 @@
 #!/usr/bin/env node
 
-const fs = require('fs').promises
-const inquirer = require('inquirer')
-const program = require('commander')
-const yaml = require('js-yaml')
 const AWS = require('aws-sdk')
 const axios = require('axios')
+const cloneDeep = require('lodash.clonedeep')
+const program = require('commander')
 
-const CONFIG_PATH = `${require('os').homedir()}/.aws_ip.yml`
+const config = require('./config')
+
 const IP_SERVICE = 'http://api.ipify.org'
 
-const parseConfig = async () => {
-  try {
-    const configFile = await fs.readFile(CONFIG_PATH, 'utf-8')
-    return yaml.safeLoad(configFile)
-  } catch (_) {
-    console.log('Config file could not be found, creating a new one.')
-    return {}
+const getEC2 = region => {
+  // Configure AWS
+  AWS.config.apiVersions = {
+    ec2: '2016-11-15',
   }
+  AWS.config.update({
+    region,
+  })
+  return new AWS.EC2()
 }
 
-const getNewIp = async config => {
-  // Provided IP manually.
-  if (program.ip) {
-    return program.ip
-  }
+const getNewIp = async () => {
   // Try to resolve IP from service.
   try {
     return await axios.get(IP_SERVICE)
@@ -34,129 +30,95 @@ const getNewIp = async config => {
   }
 }
 
-const getOldIp = async config => {
-  if (config.ip) {
-    return config.ip
-  }
-  console.log(
-    '\nCould not find an old IP address to clean up.\nWould you like to provide an existing IP address?\n',
-  )
-  let { customIpOld } = await inquirer.prompt([
-    {
-      type: 'input',
-      name: 'customIpOld',
-      message: 'Existing IP (optional): ',
-    },
-  ])
-  return customIpOld
-}
+const ingress = (ip, secgroup, dry) => ({
+  CidrIp: `${ip}/32`,
+  DryRun: dry,
+  GroupName: secgroup,
+  IpProtocol: '-1',
+})
 
-const removeOldIp = async (ip_old, secgroup, ec2) => {
-  const ingress = {
-    CidrIp: `${ip_old}/32`,
-    DryRun: program.dry,
-    GroupName: secgroup,
-    IpProtocol: '-1',
-  }
-
+const removeOldIp = async (ec2, ingress) => {
   try {
     await ec2.revokeSecurityGroupIngress(ingress).promise()
   } catch (err) {
-    console.error(
-      `\nCould not delete old ingress: ${JSON.stringify(ingress, null, 2)}`,
+    throw new Error(
+      `\nCould not delete old ingress: ${JSON.stringify(
+        ingress,
+        null,
+        2,
+      )}\n${err}`,
     )
     process.exit(1)
   }
 }
 
-const getConfig = async () => {
-  // Parse CLI args.
-  program.option('-r --region <region>', 'AWS region')
-  program.option('-s --secgroup <secgroup>', 'Security group name')
-  program.option('-i --ip', 'IP')
-  program.option('-d --dry', 'Dry run')
-  program.option('-f --force', 'Force update')
-  program.parse(process.argv)
-
-  // Parse YML configuration.
-  const config = await parseConfig()
-
-  // Overwrite with manual region.
-  if (program.region) {
-    config.region = program.region
-  }
-  // Overwrite with manual security group name.
-  if (program.secgroup) {
-    config.secgroup = program.secgroup
-  }
-  // No manual or saved region found.
-  if (!config.region) {
-    console.error('No region specified, aborting...')
-    process.exit(1)
-  }
-  // No manual or saved security group name found.
-  if (!config.secgroup) {
-    console.error('No security group name specified, aborting...')
-    process.exit(1)
-  }
-  return config
-}
-
-const getEC2 = config => {
-  // Configure AWS
-  AWS.config.apiVersions = {
-    ec2: '2016-11-15',
-  }
-  AWS.config.update({
-    region: config.region,
-  })
-  return new AWS.EC2()
-}
-
-const addNewIp = async (ip_new, secgroup, ec2) => {
-  const ingress = {
-    CidrIp: `${ip_new}/32`,
-    DryRun: program.dry,
-    GroupName: secgroup,
-    IpProtocol: '-1',
-  }
-
+const addNewIp = async (ec2, ingress) => {
   try {
     await ec2.authorizeSecurityGroupIngress(ingress).promise()
-    console.log(`\nAdded new ingress: ${JSON.stringify(ingress, null, 2)}`)
   } catch (err) {
     console.error(
       `\nCould not add new ingress: ${JSON.stringify(
         ingress,
         null,
         2,
-      )}: ${err}`,
+      )}\n${err}`,
     )
     process.exit(1)
   }
 }
 
-const saveConfig = async config =>
-  fs.writeFile(CONFIG_PATH, yaml.safeDump(config))
-
 ;(async () => {
   // Configure axios to unpack responses.
   axios.interceptors.response.use(response => response.data)
 
-  const config = await getConfig()
-  const ec2 = getEC2(config)
-  const newIp = await getNewIp(config)
-  console.log(`New IP: ${newIp}`)
-  const oldIp = await getOldIp(config)
+  // CLI args.
+  program.option('-r --region <region>', 'AWS region')
+  program.option('-s --secgroup <secgroup>', 'Security group name')
+  program.option('-d --dry', 'Dry run')
+  program.parse(process.argv)
 
-  if (!program.force && newIp === oldIp) {
-    console.log('IP has not changed, aborting.')
-    process.exit(0)
+  const cfg = await config.get(program)
+  const newCfg = cloneDeep(cfg)
+  const newIp = await getNewIp()
+  console.log(`New IP: ${newIp}`)
+
+  // For each region...
+  Object.keys(cfg).forEach(async region => {
+    // ... create a new EC2 instance.
+    const ec2 = getEC2(region)
+
+    // For each secgroup in each region...
+    Object.keys(cfg[region]).forEach(async secgroup => {
+      let oldIp = cfg[region][secgroup]
+
+      // ... remove old IP if found.
+      if (oldIp) {
+        console.log(`Removing old IP from ${region}/${secgroup}...`)
+        try {
+          await ec2
+            .revokeSecurityGroupIngress(ingress(oldIp, secgroup, program.dry))
+            .promise()
+        } catch (err) {
+          console.error(err)
+          process.exit(1)
+        }
+      } else {
+        console.log(
+          `No old IP found for ${region}/${secgroup}. Creating new rule...`,
+        )
+      }
+      try {
+        await ec2
+          .authorizeSecurityGroupIngress(ingress(newIp, secgroup, program.dry))
+          .promise()
+        newCfg[region][secgroup] = newIp
+      } catch (err) {
+        console.error(err)
+        process.exit(1)
+      }
+    })
+  })
+  if (!program.dry) {
+    await config.save(newCfg)
   }
-  if (oldIp) {
-    console.log(`\nOld IP: ${oldIp}\n`)
-    await removeOldIp(oldIp, config.secgroup, ec2)
-  }
-  await addNewIp(newIp, config.secgroup, ec2)
-  await saveConfig({ ...config, ip: newIp })
 })()
