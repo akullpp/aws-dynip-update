@@ -4,9 +4,9 @@ const yaml = require('js-yaml')
 
 const CONFIG_PATH = `${require('os').homedir()}/.aws_ip.yml`
 
-const get = program => {
+const get = (program, ip) => {
   const config = parse()
-  return withArgs(program, config)
+  return withArgs(program, config, ip)
 }
 
 // Read config from file.
@@ -16,19 +16,18 @@ const parse = () => {
     const parsedConfig = yaml.safeLoad(configFile)
     return parsedConfig
   } catch (err) {
-    console.error(
-      `Error parsing the config file could not be found, creating a new one.\n${err}`,
+    console.info(
+      `Could not parse the config file, creating a new one.\n${err}\n`,
     )
     return {}
   }
 }
 
-const withArgs = (program, config) => {
+const withArgs = (program, config, ip) => {
   // If there is secgroup or region set, the other has to present too.
-  if (
-    (!program.region && program.secgroup) ||
-    (program.region && !program.secgroup)
-  ) {
+  const { region, secgroup } = program
+
+  if ((!region && secgroup) || (region && !secgroup)) {
     throw new Error(
       'Region and security group argument are both required, exiting...',
     )
@@ -36,25 +35,20 @@ const withArgs = (program, config) => {
 
   // Empty config
   if (!Object.keys(config).length) {
-    // Set region from args.
-    if (!program.region) {
-      throw new Error('Empty configuration and no region provided, exiting...')
-    }
-    // Set secgroup from args.
-    if (!program.secgroup) {
+    if (!region || !secgroup) {
       throw new Error(
-        'Empty configuration and no security group provided, exiting...',
+        'Empty configuration and no region and security group provided, exiting...',
       )
     }
   }
 
-  if (!program.region && !program.secgroup) {
+  if (!region && !secgroup) {
     return config
   }
-  return set(config, `${program.region}.${program.secgroup}`, null)
+  return set(config, `${region}.${secgroup}`, ip)
 }
 
-const save = async config => fs.writeFile(CONFIG_PATH, yaml.safeDump(config))
+const save = config => fs.writeFileSync(CONFIG_PATH, yaml.safeDump(config))
 
 module.exports = {
   get,

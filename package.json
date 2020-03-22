@@ -1,7 +1,7 @@
 {
   "name": "aws-dynip-update",
   "version": "0.1.4",
-  "description": "Updates the IP rule",
+  "description": "Update the IP of an inbound rule of a security group",
   "author": "Andreas Kull <akullpp@gmail.com>",
   "license": "MIT",
   "main": "index.js",

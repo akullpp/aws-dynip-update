@@ -1,6 +1,6 @@
 # aws-dynip-update
 
-Update the IP of an inbound rule of a security group for EC2.
+Update the IP of an inbound rule in security groups.
 
 ## Requirements
 
@@ -16,16 +16,14 @@ Options:
   -r --region <region>      AWS region
   -s --secgroup <secgroup>  Security group name
   -d --dry                  Dry run
-  -f --force                Force update
   -h, --help                output usage information
 ```
 
 The **region** and **security group name** parameters are required for the first time.
 
-After the initial run, you'll have a configuration in `$HOME/.aws_ip.yml` and don't need to provide the params again if they didn't change.
+After the initial run, you'll have a configuration in `$HOME/.aws_ip.yml` and don't need to provide the params again if they didn't change. Of course you can always add another region/secgroup combination.
 
-## TODO
+## Notes
 
-- Currently a rule that allows **all trafic** is created
-- Allow for description
-- Allow multiple regions/secgroups
+- Created rule allows **all trafic**
+- Created rule doesn't have a description
